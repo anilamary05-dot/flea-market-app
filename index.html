@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stallfinder: reserve a flea market stall</title>
+<style>
+  :root {
+    --bg: #f6f3ee;
+    --ink: #22261f;
+    --muted: #5d6357;
+    --line: #d9d3c7;
+    --card: #ffffff;
+    --accent: #2f6b4f;
+    --accent-ink: #ffffff;
+    --warn: #8a3b12;
+    --warn-bg: #fbeadf;
+    --taken: #e7e3da;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 Georgia, "Times New Roman", serif; }
+  h1, h2, h3, button, label, input, select, textarea, .ui { font-family: "Trebuchet MS", "Segoe UI", Arial, sans-serif; }
+  header { background: var(--accent); color: var(--accent-ink); padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 1.35rem; }
+  header button { background: transparent; color: inherit; border: 1.5px solid currentColor; border-radius: 6px; padding: 8px 14px; font-size: 0.95rem; cursor: pointer; }
+  main { max-width: 860px; margin: 0 auto; padding: 22px 18px 60px; }
+  h2 { font-size: 1.5rem; margin: 0 0 6px; }
+  h3 { font-size: 1.1rem; margin: 22px 0 8px; }
+  p { margin: 0 0 12px; max-width: 70ch; }
+  .muted { color: var(--muted); }
+  input[type=search], input[type=text], input[type=email], input[type=tel], select, textarea {
+    width: 100%; padding: 10px 12px; font-size: 1rem; border: 1.5px solid #9a9486; border-radius: 6px; background: #fff; color: var(--ink);
+  }
+  label { display: block; font-weight: 600; margin: 14px 0 4px; }
+  .hint { font-weight: 400; color: var(--muted); font-size: 0.9rem; display: block; margin-top: 2px; }
+  button { cursor: pointer; font-size: 1rem; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border: none; border-radius: 6px; padding: 11px 20px; font-weight: 600; }
+  button.link { background: none; border: none; color: var(--accent); text-decoration: underline; padding: 0; font-size: 1rem; }
+  :focus-visible { outline: 3px solid #e0a100; outline-offset: 2px; }
+  .market { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin: 14px 0; }
+  .market h3 { margin-top: 0; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: "Trebuchet MS", Arial, sans-serif; font-size: 0.95rem; color: var(--muted); margin-bottom: 10px; }
+  .rules { background: #eef3ee; border-left: 4px solid var(--accent); padding: 10px 16px; border-radius: 4px; }
+  .rules ul { margin: 6px 0 0; padding-left: 20px; }
+  .stalls { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 8px 0; }
+  .stall { text-align: left; background: #fff; border: 1.5px solid #9a9486; border-radius: 8px; padding: 10px 12px; font-family: "Trebuchet MS", Arial, sans-serif; }
+  .stall b { display: block; }
+  .stall[aria-pressed=true] { border-color: var(--accent); box-shadow: 0 0 0 3px #bcd6c8; background: #f0f7f3; }
+  .stall:disabled { background: var(--taken); color: #77736a; cursor: not-allowed; border-style: dashed; }
+  .alert { background: var(--warn-bg); color: var(--warn); border: 1px solid #e3b79c; padding: 10px 14px; border-radius: 6px; margin: 12px 0; font-family: "Trebuchet MS", Arial, sans-serif; }
+  .ok { background: #e4f1ea; border: 1px solid #a9cdb9; border-radius: 8px; padding: 18px; }
+  .summary { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; margin: 12px 0; font-family: "Trebuchet MS", Arial, sans-serif; }
+  .row { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; }
+  .check input { margin-top: 5px; width: 18px; height: 18px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stallfinder</h1>
+  <button id="myBtn" type="button">My reservations</button>
+</header>
+<main id="app" tabindex="-1"></main>
+
+<script>
+// ---------- Sample data: every market has its own price and rules ----------
+const MARKETS = [
+  {
+    id: "riverside", name: "Riverside Sunday Market", area: "Riverside", day: 0, time: "08:00 to 14:00",
+    price: 15, deposit: 0, deadlineDays: 1, sellers: "Private sellers only",
+    rules: ["Private sellers only: no new or commercial goods", "Maximum 2 tables per stall", "No food or drink sales", "Set up from 07:00"],
+    fields: [{ key: "idNumber", label: "ID card number", hint: "Needed to register as a private seller" }],
+    stalls: [["R1","Small (2 m)",0,false],["R2","Small (2 m)",0,true],["R3","Medium (3 m)",5,false],["R4","Medium (3 m)",5,false],["R5","Large (4 m)",10,true],["R6","Large (4 m)",10,false]]
+  },
+  {
+    id: "oldtown", name: "Old Town Flea", area: "Old Town", day: 6, time: "09:00 to 16:00",
+    price: 25, deposit: 10, deadlineDays: 7, sellers: "Private sellers and collectors",
+    rules: ["Register at least 7 days before the market", "10 euro refundable deposit, returned if you leave the stall clean", "Antiques must be labelled with an age estimate", "Cars must be moved out by 08:30"],
+    fields: [{ key: "idNumber", label: "ID card number", hint: "Needed to register" }, { key: "itemList", label: "Main item categories", hint: "For example: books, furniture, clothes" }],
+    stalls: [["O1","Table (2 m)",0,false],["O2","Table (2 m)",0,false],["O3","Corner (3 m)",10,false],["O4","Corner (3 m)",10,true],["O5","Wall space (4 m)",15,false]]
+  },
+  {
+    id: "parkside", name: "Parkside Community Swap", area: "Parkside", day: 6, time: "10:00 to 15:00",
+    price: 5, deposit: 0, deadlineDays: 2, sellers: "Residents of the district get a free stall",
+    rules: ["Residents of the district pay nothing; others pay 5 euros", "Proof of address is needed for the free stall", "Bring your own table", "Unsold items must be taken home"],
+    fields: [{ key: "address", label: "Home address", hint: "Residents are checked against the district list" }],
+    stalls: [["P1","Pitch (2 m)",0,false],["P2","Pitch (2 m)",0,false],["P3","Pitch (2 m)",0,true],["P4","Pitch (3 m)",2,false],["P5","Pitch (3 m)",2,false],["P6","Pitch (3 m)",2,false]]
+  },
+  {
+    id: "harbour", name: "Harbour Night Bazaar", area: "Harbour", day: 5, time: "17:00 to 22:00",
+    price: 40, deposit: 20, deadlineDays: 14, sellers: "Private and business sellers",
+    rules: ["Register at least 14 days before the market", "Businesses must give a tax number", "20 euro deposit, refunded after the market", "Stalls must have their own lighting"],
+    fields: [{ key: "idNumber", label: "ID card number", hint: "Needed to register" }, { key: "taxNumber", label: "Tax number (businesses only)", hint: "Leave empty if you are a private seller", optional: true }],
+    stalls: [["H1","Standard (3 m)",0,false],["H2","Standard (3 m)",0,true],["H3","Standard (3 m)",0,false],["H4","Double (6 m)",35,false]]
+  }
+];
+
+// ---------- Helpers ----------
+const app = document.getElementById("app");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const WEEKDAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+let state = { search: "", market: null, date: "", stall: null, errors: [], values: {} };
+
+function loadRes() { try { return JSON.parse(localStorage.getItem("reservations") || "[]"); } catch (e) { return []; } }
+function saveRes(list) { try { localStorage.setItem("reservations", JSON.stringify(list)); } catch (e) {} }
+
+function iso(d) { return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function pretty(isoStr) { return new Date(isoStr + "T12:00:00").toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }); }
+function upcomingDates(m) {
+  const out = [], today = new Date(); today.setHours(12,0,0,0);
+  for (let i = m.deadlineDays; i < 90 && out.length < 4; i++) {
+    const d = new Date(today); d.setDate(today.getDate() + i);
+    if (d.getDay() === m.day) out.push(iso(d));
+  }
+  return out;
+}
+function isTaken(m, stallId, stallTaken, date) {
+  return stallTaken || loadRes().some(r => r.marketId === m.id && r.date === date && r.stallId === stallId);
+}
+function stallPrice(m, s) { return m.price + s[2]; }
+function setFocus() { app.focus({ preventScroll: true }); window.scrollTo(0, 0); }
+
+// ---------- Views ----------
+function viewList() {
+  const q = state.search.trim().toLowerCase();
+  const list = MARKETS.filter(m => (m.name + " " + m.area).toLowerCase().includes(q));
+  app.innerHTML = `
+    <h2>Find a stall for your old belongings</h2>
+    <p class="muted">Pick a market to see its stalls, price and registration rules. Each market has its own rules.</p>
+    <label for="search">Search by market name or area</label>
+    <input id="search" type="search" value="${esc(state.search)}" placeholder="For example: Old Town">
+    <div id="results">${list.length ? list.map(card).join("") : `<p class="alert">No market matches "${esc(state.search)}". Clear the search to see all ${MARKETS.length} markets.</p>`}</div>`;
+  const s = document.getElementById("search");
+  s.addEventListener("input", e => {
+    state.search = e.target.value;
+    const q2 = state.search.trim().toLowerCase();
+    const l2 = MARKETS.filter(m => (m.name + " " + m.area).toLowerCase().includes(q2));
+    document.getElementById("results").innerHTML = l2.length ? l2.map(card).join("") : `<p class="alert">No market matches "${esc(state.search)}". Clear the search to see all ${MARKETS.length} markets.</p>`;
+  });
+}
+function card(m) {
+  const free = m.stalls.filter(s => !s[3]).length;
+  return `<article class="market">
+    <h3>${esc(m.name)}</h3>
+    <div class="meta"><span>${WEEKDAYS[m.day]}s, ${esc(m.time)}</span><span>From ${m.price} euros per stall</span><span>${free} of ${m.stalls.length} stalls free</span></div>
+    <p>${esc(m.sellers)}. Register at least ${m.deadlineDays} day${m.deadlineDays > 1 ? "s" : ""} ahead.</p>
+    <button class="primary" type="button" onclick="openMarket('${m.id}')">View stalls and rules</button>
+  </article>`;
+}
+
+function viewMarket() {
+  const m = state.market, dates = upcomingDates(m);
+  if (!state.date) state.date = dates[0];
+  const chosen = state.stall ? m.stalls.find(s => s[0] === state.stall) : null;
+  app.innerHTML = `
+    <button class="link ui" type="button" onclick="goList()">Back to all markets</button>
+    <h2 style="margin-top:12px">${esc(m.name)}</h2>
+    <div class="meta"><span>${WEEKDAYS[m.day]}s, ${esc(m.time)}</span><span>${esc(m.area)}</span><span>${esc(m.sellers)}</span></div>
+    <div class="rules"><b class="ui">Rules for this market</b><ul>${m.rules.map(r => `<li>${esc(r)}</li>`).join("")}</ul></div>
+
+    <h3>1. Choose a date</h3>
+    <label for="date" class="ui">Market date <span class="hint">Only dates that still meet the ${m.deadlineDays}-day registration deadline are shown.</span></label>
+    <select id="date">${dates.map(d => `<option value="${d}" ${d === state.date ? "selected" : ""}>${pretty(d)}</option>`).join("")}</select>
+
+    <h3>2. Choose a stall</h3>
+    <div class="stalls" role="group" aria-label="Stalls">
+      ${m.stalls.map(s => { const t = isTaken(m, s[0], s[3], state.date); return `<button type="button" class="stall" data-id="${s[0]}" aria-pressed="${state.stall === s[0]}" ${t ? "disabled" : ""}>
+        <b>${s[0]}: ${esc(s[1])}</b>${t ? "Already taken" : stallPrice(m, s) + " euros"}</button>`; }).join("")}
+    </div>
+    ${chosen ? form(m, chosen) : `<p class="muted">Select a free stall to continue.</p>`}`;
+
+  document.getElementById("date").addEventListener("change", e => { state.date = e.target.value; state.stall = null; state.errors = []; viewMarket(); });
+  app.querySelectorAll(".stall").forEach(b => b.addEventListener("click", () => { state.stall = b.dataset.id; state.errors = []; viewMarket(); document.getElementById("details").scrollIntoView({ behavior: "smooth" }); }));
+  const f = document.getElementById("reserve");
+  if (f) f.addEventListener("click", submit);
+}
+
+function form(m, s) {
+  const v = state.values, price = stallPrice(m, s), total = price + m.deposit;
+  return `<h3 id="details">3. Your details</h3>
+    <div class="summary">${esc(s[0])}, ${esc(s[1])} on ${pretty(state.date)}<br>
+      Stall price: ${price} euros${m.deposit ? `<br>Refundable deposit: ${m.deposit} euros` : ""}<br><b>Total to pay at the market: ${total} euros</b></div>
+    ${state.errors.length ? `<div class="alert" role="alert"><b>Please fix these before reserving:</b><ul>${state.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul></div>` : ""}
+    <label for="name">Full name</label><input id="name" type="text" value="${esc(v.name || "")}" autocomplete="name">
+    <label for="email">Email address <span class="hint">Your confirmation is shown here and sent to this address.</span></label><input id="email" type="email" value="${esc(v.email || "")}" autocomplete="email">
+    <label for="items">What will you sell? <span class="hint">For example: used books and kitchenware</span></label><textarea id="items" rows="3">${esc(v.items || "")}</textarea>
+    ${m.fields.map(f => `<label for="f_${f.key}">${esc(f.label)}<span class="hint">${esc(f.hint)}</span></label><input id="f_${f.key}" type="text" value="${esc(v[f.key] || "")}">`).join("")}
+    <label class="check"><input id="agree" type="checkbox" ${v.agree ? "checked" : ""}><span>I have read and accept the rules of ${esc(m.name)}.</span></label>
+    <p style="margin-top:18px"><button id="reserve" class="primary" type="button">Reserve stall ${esc(s[0])}</button></p>`;
+}
+
+function submit() {
+  const m = state.market, s = m.stalls.find(x => x[0] === state.stall);
+  const get = id => (document.getElementById(id) || {}).value || "";
+  const v = { name: get("name").trim(), email: get("email").trim(), items: get("items").trim(), agree: document.getElementById("agree").checked };
+  m.fields.forEach(f => v[f.key] = get("f_" + f.key).trim());
+  state.values = v;
+  const errs = [];
+  if (!v.name) errs.push("Enter your full name.");
+  if (!/^\S+@\S+\.\S+$/.test(v.email)) errs.push("Enter a valid email address, like name@example.com.");
+  if (!v.items) errs.push("Describe what you will sell.");
+  m.fields.forEach(f => { if (!f.optional && !v[f.key]) errs.push("Fill in: " + f.label + "."); });
+  if (!v.agree) errs.push("Accept the market rules to continue.");
+  if (isTaken(m, s[0], s[3], state.date)) errs.push("This stall was just taken. Choose another stall.");
+  state.errors = errs;
+  if (errs.length) { viewMarket(); document.getElementById("details").scrollIntoView(); return; }
+  const ref = "SF-" + Math.random().toString(36).slice(2, 7).toUpperCase();
+  const list = loadRes();
+  list.push({ ref, marketId: m.id, marketName: m.name, date: state.date, stallId: s[0], stallLabel: s[1], total: stallPrice(m, s) + m.deposit, name: v.name, email: v.email });
+  saveRes(list);
+  state = { search: "", market: null, date: "", stall: null, errors: [], values: {} };
+  viewDone(list[list.length - 1]);
+}
+
+function viewDone(r) {
+  app.innerHTML = `<div class="ok"><h2>Stall reserved</h2>
+    <p>Your reference is <b>${esc(r.ref)}</b>. Keep it for the market day.</p>
+    <p>${esc(r.marketName)}<br>Stall ${esc(r.stallId)} (${esc(r.stallLabel)})<br>${pretty(r.date)}<br>Total to pay at the market: ${r.total} euros</p>
+    <p>Confirmation for ${esc(r.name)} at ${esc(r.email)}.</p>
+    <button class="primary" type="button" onclick="goList()">Find another stall</button> <button class="link" type="button" onclick="viewMine()">See my reservations</button></div>`;
+  setFocus();
+}
+
+function viewMine() {
+  const list = loadRes();
+  app.innerHTML = `<h2>My reservations</h2>` + (list.length ? list.map(r => `<article class="market">
+      <h3>${esc(r.marketName)}</h3>
+      <p>Stall ${esc(r.stallId)} (${esc(r.stallLabel)}), ${pretty(r.date)}<br>Reference ${esc(r.ref)}. Total ${r.total} euros.</p>
+      <button class="link" type="button" onclick="cancelRes('${esc(r.ref)}')">Cancel this reservation</button></article>`).join("")
+    : `<p>You have no reservations yet.</p>`) + `<p><button class="primary" type="button" onclick="goList()">Find a stall</button></p>`;
+  setFocus();
+}
+
+// ---------- Navigation ----------
+function openMarket(id) { state.market = MARKETS.find(m => m.id === id); state.date = ""; state.stall = null; state.errors = []; state.values = {}; viewMarket(); setFocus(); }
+function goList() { state.market = null; viewList(); setFocus(); }
+function cancelRes(ref) { if (confirm("Cancel reservation " + ref + "? The stall will become free again.")) { saveRes(loadRes().filter(r => r.ref !== ref)); viewMine(); } }
+document.getElementById("myBtn").addEventListener("click", viewMine);
+viewList();
+</script>
+</body>
+</html>
