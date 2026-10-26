@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stallfinder: find and reserve a flea market stall</title>
+<style>
+:root{--bg:#f6f3ee;--ink:#22261f;--mut:#5d6357;--line:#d9d3c7;--card:#fff;--acc:#2f6b4f;--accink:#fff;--bad:#9b2c10;--badbg:#fbeadf;--okbg:#e4f1ea;--taken:#e7e3da}
+@media(prefers-color-scheme:dark){:root{--bg:#1c1f1a;--ink:#eceae3;--mut:#b2b5a8;--line:#3a3e35;--card:#262a23;--acc:#7fc4a0;--accink:#10231a;--bad:#ffb599;--badbg:#3b221a;--okbg:#1f3328;--taken:#33362f}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.55 Georgia,serif}
+h1,h2,h3,button,label,input,select,textarea,.ui{font-family:"Trebuchet MS","Segoe UI",Arial,sans-serif}
+header{background:var(--acc);color:var(--accink);padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+header h1{margin:0;font-size:1.3rem}header button{background:none;color:inherit;border:1.5px solid currentColor;border-radius:6px;padding:7px 12px}
+main{max-width:820px;margin:0 auto;padding:20px 16px 60px}h2{margin:0 0 6px;font-size:1.45rem}h3{margin:20px 0 8px;font-size:1.1rem}
+p{margin:0 0 10px;max-width:68ch}.mut{color:var(--mut)}
+input,select,textarea{width:100%;padding:10px 12px;font-size:1rem;border:1.5px solid #8d8878;border-radius:6px;background:var(--card);color:var(--ink)}
+input.bad,textarea.bad{border-color:var(--bad);border-width:2px}
+label{display:block;font-weight:600;margin:14px 0 4px}.hint{font-weight:400;color:var(--mut);font-size:.9rem;display:block}.msg{color:var(--bad);font-family:"Trebuchet MS",Arial,sans-serif;font-size:.92rem;margin-top:4px}
+button{cursor:pointer;font-size:1rem;color:var(--ink)}.primary{background:var(--acc);color:var(--accink);border:none;border-radius:6px;padding:11px 20px;font-weight:600}
+.link{background:none;border:none;color:var(--acc);text-decoration:underline;padding:0}
+:focus-visible{outline:3px solid #e0a100;outline-offset:2px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px}
+.chip{border:1.5px solid #8d8878;border-radius:20px;background:var(--card);padding:7px 14px;font-family:"Trebuchet MS",Arial,sans-serif}.chip[aria-pressed=true]{background:var(--acc);color:var(--accink);border-color:var(--acc)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:15px 17px;margin:12px 0}.card h3{margin-top:0}
+.meta{display:flex;flex-wrap:wrap;gap:4px 16px;font-family:"Trebuchet MS",Arial,sans-serif;font-size:.93rem;color:var(--mut);margin-bottom:8px}
+.tag{display:inline-block;border-radius:4px;padding:2px 8px;font-family:"Trebuchet MS",Arial,sans-serif;font-size:.88rem;margin:0 6px 6px 0}.yes{background:var(--okbg)}.no{background:var(--badbg);color:var(--bad)}
+.box{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:10px 0;font-family:"Trebuchet MS",Arial,sans-serif}
+.alert{background:var(--badbg);color:var(--bad);border-radius:6px;padding:10px 14px;margin:10px 0;font-family:"Trebuchet MS",Arial,sans-serif}
+.entrance{text-align:center;border:1.5px solid var(--line);border-radius:6px;padding:4px;margin:8px 0;font-family:"Trebuchet MS",Arial,sans-serif;font-size:.85rem;color:var(--mut)}
+.row{margin:6px 0}.row .lbl{font-family:"Trebuchet MS",Arial,sans-serif;font-size:.85rem;color:var(--mut)}
+.stalls{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.stall{text-align:left;background:var(--card);border:1.5px solid #8d8878;border-radius:8px;padding:9px 11px;font-family:"Trebuchet MS",Arial,sans-serif;font-size:.92rem}.stall b{display:block}
+.stall[aria-pressed=true]{border:3px solid var(--acc)}.stall:disabled{background:var(--taken);color:var(--mut);border-style:dashed;cursor:not-allowed}
+.ok{background:var(--okbg);border-radius:8px;padding:16px}.check{display:flex;gap:10px;font-weight:400;align-items:flex-start}.check input{width:18px;height:18px;margin-top:5px}
+</style></head><body>
+<header><h1>Stallfinder</h1><button id="mine" type="button">My reservations</button></header>
+<main id="app" tabindex="-1"></main>
+<script>
+const ITEMS=[["clothes","Clothes"],["books","Books and media"],["household","Household items"],["toys","Toys"],["electronics","Electronics"],["furniture","Furniture"]];
+const DAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+// stall: [id, plain name, what fits, price extra, taken, row]
+const MARKETS=[
+{id:"riverside",name:"Riverside Sunday Market",area:"Riverside",day:0,time:"08:00 to 14:00",arrive:"07:00",trip:"Unload at the gate before 07:30, then move your car. Plan about 30 minutes to set up your table.",fee:15,dep:0,deadline:1,who:"Private sellers only",cancel:"Free until 2 days before the market.",allow:{clothes:1,books:1,household:1,toys:1,electronics:1,furniture:0},
+ rules:["Private sellers only, no new goods","Max 2 tables per stall","No food or drink sales"],fields:[["idNumber","ID card number","Needed to register as a private seller"]],bring:["Your own table or clothes rail","Coins for change","Bags for buyers"],
+ stalls:[["R1","Small table, 2 m","Fits about 2 boxes",0,0,"front"],["R2","Small table, 2 m","Fits about 2 boxes",0,1,"front"],["R3","Medium, 3 m","Fits about 4 boxes",5,0,"middle"],["R4","Medium, 3 m","Fits about 4 boxes",5,0,"middle"],["R5","Large, 4 m","Fits about 6 boxes or a rail",10,1,"back"],["R6","Large, 4 m","Fits about 6 boxes or a rail",10,0,"back"]]},
+{id:"oldtown",name:"Old Town Flea",area:"Old Town",day:6,time:"09:00 to 16:00",arrive:"08:00",trip:"Cars must leave by 08:30. Carry your boxes to your stall, so bring a trolley or a helper.",fee:25,dep:10,deadline:7,who:"Private sellers and collectors",cancel:"50% of the stall fee is kept if you cancel less than 7 days before. No-shows pay an extra 10 EUR.",allow:{clothes:1,books:1,household:1,toys:1,electronics:0,furniture:0},
+ rules:["Register at least 7 days ahead","10 EUR deposit, refunded if you leave the stall clean","Antiques need an age estimate on the label","Cars must leave by 08:30"],fields:[["idNumber","ID card number","Needed to register"],["itemList","Main item categories","For example: books, kitchenware"]],bring:["Your own table (2 m stalls)","Labels for antiques","Rubbish bags for your deposit"],
+ stalls:[["O1","Table, 2 m","Fits about 3 boxes",0,0,"front"],["O2","Table, 2 m","Fits about 3 boxes",0,0,"front"],["O3","Corner, 3 m","Fits about 5 boxes",10,0,"middle"],["O4","Corner, 3 m","Fits about 5 boxes",10,1,"middle"],["O5","Wall space, 4 m","Fits about 7 boxes or a rail",15,0,"back"]]},
+{id:"parkside",name:"Parkside Community Swap",area:"Parkside",day:6,time:"10:00 to 15:00",arrive:"09:00",trip:"No car access to the pitches. Carry your items from the nearest street.",fee:5,dep:0,deadline:2,who:"Residents of the district stall for free",cancel:"Free to cancel at any time.",allow:{clothes:1,books:1,household:1,toys:1,electronics:1,furniture:1},
+ rules:["Residents pay nothing, others pay 5 EUR","Proof of address needed for the free stall","Bring your own table","Take unsold items home"],fields:[["address","Home address","Checked against the district list"]],bring:["Your own table","Proof of address","Bags to take unsold items home"],
+ stalls:[["P1","Pitch, 2 m","Fits about 2 boxes",0,0,"front"],["P2","Pitch, 2 m","Fits about 2 boxes",0,0,"front"],["P3","Pitch, 2 m","Fits about 2 boxes",0,1,"front"],["P4","Pitch, 3 m","Fits about 4 boxes",2,0,"back"],["P5","Pitch, 3 m","Fits about 4 boxes",2,0,"back"],["P6","Pitch, 3 m","Fits about 4 boxes",2,0,"back"]]},
+{id:"harbour",name:"Harbour Night Bazaar",area:"Harbour",day:5,time:"17:00 to 22:00",arrive:"15:30",trip:"Loading starts at 15:30. Your lighting must be set up before the market opens at 17:00.",fee:40,dep:20,deadline:14,who:"Private and business sellers",cancel:"Deposit is kept if you cancel less than 14 days before.",allow:{clothes:1,books:1,household:1,toys:1,electronics:1,furniture:0},
+ rules:["Register at least 14 days ahead","Businesses must give a tax number","Stalls need their own lighting"],fields:[["idNumber","ID card number","Needed to register"],["taxNumber","Tax number (businesses only)","Leave empty if you are a private seller",1]],bring:["Lighting for your stall","Your own table","Change and a card reader if you have one"],
+ stalls:[["H1","Standard, 3 m","Fits about 4 boxes",0,0,"front"],["H2","Standard, 3 m","Fits about 4 boxes",0,1,"middle"],["H3","Standard, 3 m","Fits about 4 boxes",0,0,"middle"],["H4","Double, 6 m","Fits about 9 boxes or two rails",35,0,"back"]]}];
+
+const app=document.getElementById("app");
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let S={items:[],m:null,date:"",stall:null,v:{},err:{}};
+const load=()=>{try{return JSON.parse(localStorage.getItem("res2")||"[]")}catch(e){return[]}};
+const save=l=>{try{localStorage.setItem("res2",JSON.stringify(l))}catch(e){}};
+const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const pretty=s=>new Date(s+"T12:00:00").toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"});
+function dates(m){const o=[],t=new Date();t.setHours(12);for(let i=m.deadline;i<100&&o.length<5;i++){const d=new Date(t);d.setDate(t.getDate()+i);if(d.getDay()===m.day)o.push(iso(d))}return o}
+const taken=(m,s,d)=>s[4]||load().some(r=>r.mid===m.id&&r.date===d&&r.sid===s[0]);
+const price=(m,s)=>m.fee+s[3];
+const blocked=m=>S.items.filter(k=>!m.allow[k]);
+const label=k=>ITEMS.find(i=>i[0]===k)[1];
+const toTop=()=>{app.focus({preventScroll:true});scrollTo(0,0)};
+
+function home(){
+  const list=MARKETS.slice().sort((a,b)=>(a.fee+a.dep)-(b.fee+b.dep));
+  app.innerHTML=`<h2>Find a stall for your old belongings</h2>
+  <p class="mut">Choose what you are selling. Each market shows whether it allows your items and what you will pay in total.</p>
+  <div class="ui"><b>What are you selling?</b></div>
+  <div class="chips" role="group" aria-label="What are you selling">${ITEMS.map(i=>`<button type="button" class="chip" data-k="${i[0]}" aria-pressed="${S.items.includes(i[0])}">${i[1]}</button>`).join("")}</div>
+  ${list.map(m=>{const b=blocked(m);return `<article class="card"><h3>${esc(m.name)}</h3>
+   <div class="meta"><span>${DAYS[m.day]}s, ${m.time}</span><span>From <b>${m.fee+m.dep} EUR</b> in total (stall ${m.fee}${m.dep?` + ${m.dep} deposit`:""})</span><span>Register ${m.deadline} day${m.deadline>1?"s":""} ahead</span></div>
+   ${S.items.length?(b.length?`<span class="tag no">Not allowed: ${b.map(label).join(", ")}</span>`:`<span class="tag yes">All your items are allowed</span>`):""}
+   <p class="mut" style="margin-bottom:6px">${esc(m.who)}. Cancelling: ${esc(m.cancel)}</p>
+   <button class="primary" type="button" onclick="openM('${m.id}')">View stalls and book</button></article>`}).join("")}`;
+  app.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{const k=c.dataset.k;S.items=S.items.includes(k)?S.items.filter(x=>x!==k):S.items.concat(k);home()});
+}
+
+function market(){
+  const m=S.m,ds=dates(m);if(!S.date||!ds.includes(S.date))S.date=ds[0];
+  const st=S.stall?m.stalls.find(s=>s[0]===S.stall):null;if(st&&taken(m,st,S.date)){S.stall=null}
+  const b=blocked(m),rows=["front","middle","back"];
+  app.innerHTML=`<button class="link ui" type="button" onclick="goHome()">Back to all markets</button>
+  <h2 style="margin-top:10px">${esc(m.name)}</h2><div class="meta"><span>${DAYS[m.day]}s, ${m.time}</span><span>${esc(m.who)}</span><span>Arrive from ${m.arrive}</span></div>
+  ${S.items.length?(b.length?`<div class="alert"><b>Not allowed here:</b> ${b.map(label).join(", ")}. You can still book, but leave those items at home.</div>`:`<div class="box">All the items you chose are allowed here.</div>`):""}
+  <div class="box"><b>Price:</b> stall ${m.fee} EUR${m.dep?`, refundable deposit ${m.dep} EUR`:""}. Larger stalls cost extra.<br><b>Cancelling:</b> ${esc(m.cancel)}</div>
+  <div class="box"><b>Getting there and setting up</b><br>${esc(m.trip)}</div>
+  <div class="box"><b>Rules</b><ul style="margin:6px 0 0;padding-left:20px">${m.rules.map(r=>`<li>${esc(r)}</li>`).join("")}</ul></div>
+  <h3>1. Date</h3><select id="date" aria-label="Market date">${ds.map(d=>`<option value="${d}" ${d===S.date?"selected":""}>${pretty(d)}</option>`).join("")}</select>
+  <h3>2. Stall</h3><div class="entrance">ENTRANCE</div>
+  ${rows.map(r=>{const g=m.stalls.filter(s=>s[5]===r);return g.length?`<div class="row"><div class="lbl">${r==="front"?"Near the entrance":r==="middle"?"Middle":"At the back"}</div><div class="stalls">${g.map(s=>{const t=taken(m,s,S.date);return `<button type="button" class="stall" data-id="${s[0]}" aria-pressed="${S.stall===s[0]}" ${t?"disabled":""}><b>${s[0]}: ${esc(s[1])}</b>${esc(s[2])}<br>${t?"Already taken":price(m,s)+" EUR"}</button>`}).join("")}</div></div>`:""}).join("")}
+  ${st?form(m,st):`<p class="mut" style="margin-top:12px">Choose a free stall to continue.</p>`}`;
+  document.getElementById("date").onchange=e=>{S.date=e.target.value;S.err={};market()};
+  app.querySelectorAll(".stall").forEach(x=>x.onclick=()=>{S.stall=x.dataset.id;S.err={};market();document.getElementById("details").scrollIntoView({behavior:"smooth"})});
+  app.querySelectorAll("[data-k]").forEach(i=>{i.oninput=()=>{S.v[i.dataset.k]=i.type==="checkbox"?i.checked:i.value}});
+  const r=document.getElementById("reserve");if(r)r.onclick=submit;
+}
+function fld(id,l,h,type,ph){const e=S.err[id],v=S.v[id]||"";const inp=type==="area"?`<textarea id="${id}" data-k="${id}" rows="3" class="${e?"bad":""}" ${e?`aria-invalid="true" aria-describedby="e_${id}"`:""}>${esc(v)}</textarea>`:`<input id="${id}" data-k="${id}" type="${type||"text"}" value="${esc(v)}" class="${e?"bad":""}" ${e?`aria-invalid="true" aria-describedby="e_${id}"`:""}>`;
+  return `<label for="${id}">${esc(l)}${h?`<span class="hint">${esc(h)}</span>`:""}</label>${inp}${e?`<div class="msg" id="e_${id}">${esc(e)}</div>`:""}`}
+function form(m,s){const tot=price(m,s)+m.dep;
+  return `<h3 id="details">3. Your details</h3>
+  <div class="box"><b>${s[0]}: ${esc(s[1])}</b> on ${pretty(S.date)}<br>Stall ${price(m,s)} EUR${m.dep?` + refundable deposit ${m.dep} EUR`:""}<br><b>Total to pay at the market: ${tot} EUR</b><br><span class="mut">Cancelling: ${esc(m.cancel)}</span></div>
+  ${fld("name","Full name","","text")}${fld("email","Email address","We only use it as your contact. No email is sent from this prototype.","email")}${fld("items","What will you sell?","For example: used books and kitchenware","area")}
+  ${m.fields.map(f=>fld(f[0],f[1],f[2],"text")).join("")}
+  <label class="check"><input type="checkbox" id="agree" data-k="agree" ${S.v.agree?"checked":""}><span>I accept the rules of ${esc(m.name)} (listed above).</span></label>
+  ${S.err.agree?`<div class="msg" id="e_agree">${esc(S.err.agree)}</div>`:""}
+  <p style="margin-top:16px"><button id="reserve" class="primary" type="button">Reserve stall ${s[0]}</button></p>`}
+
+function submit(){
+  const m=S.m,s=m.stalls.find(x=>x[0]===S.stall),v=S.v,e={};
+  if(!(v.name||"").trim())e.name="Enter your full name.";
+  if(!/^\S+@\S+\.\S+$/.test((v.email||"").trim()))e.email="Enter a valid email address, like name@example.com.";
+  if(!(v.items||"").trim())e.items="Describe what you will sell.";
+  m.fields.forEach(f=>{const x=(v[f[0]]||"").trim();if(!f[3]&&!x)e[f[0]]="Fill in: "+f[1]+".";else if(f[0]==="idNumber"&&x&&!/^[A-Za-z0-9 -]{6,}$/.test(x))e[f[0]]="Enter your ID number, at least 6 letters or digits."});
+  if(!v.agree)e.agree="Accept the market rules to continue.";
+  const em=(v.email||"").trim().toLowerCase();
+  if(load().some(r=>r.mid===m.id&&r.date===S.date&&r.email===em))e.email="This email already has a stall at this market on that date.";
+  if(taken(m,s,S.date))e.name="This stall was just taken. Choose another stall.";
+  S.err=e;
+  if(Object.keys(e).length){market();const first=document.querySelector(".bad,#agree");if(first)first.focus();return}
+  const ref="SF-"+Math.random().toString(36).slice(2,7).toUpperCase(),l=load();
+  const r={ref,mid:m.id,mname:m.name,date:S.date,sid:s[0],sname:s[1],total:price(m,s)+m.dep,name:v.name.trim(),email:em,arrive:m.arrive,trip:m.trip,cancel:m.cancel,bring:m.bring};
+  l.push(r);save(l);S={items:S.items,m:null,date:"",stall:null,v:{},err:{}};done(r)}
+
+function done(r){
+  app.innerHTML=`<div class="ok"><h2>Stall reserved</h2><p>Reference <b>${esc(r.ref)}</b>. This reservation is saved on this device only, and no email is sent.</p>
+  <p>${esc(r.mname)}<br>Stall ${esc(r.sid)}, ${esc(r.sname)}<br>${pretty(r.date)}, arrive from ${esc(r.arrive)}<br>Pay <b>${r.total} EUR</b> at the market.</p>
+  <h3>Getting there and setting up</h3><p>${esc(r.trip||"")}</p><h3>What to bring</h3><ul>${r.bring.map(b=>`<li>${esc(b)}</li>`).join("")}</ul>
+  <p class="mut">Cancelling: ${esc(r.cancel)}</p>
+  <button class="primary" type="button" onclick="goHome()">Find another stall</button> <button class="link" type="button" onclick="mineV()">See my reservations</button></div>`;toTop()}
+
+function mineV(){
+  const l=load();
+  app.innerHTML=`<h2>My reservations</h2>`+(l.length?l.map(r=>{const m=MARKETS.find(x=>x.id===r.mid);return `<article class="card"><h3>${esc(r.mname)}</h3>
+   <p>Stall ${esc(r.sid)}, ${esc(r.sname)}<br>${pretty(r.date)}, arrive from ${esc(r.arrive)}<br>Reference ${esc(r.ref)}. Total ${r.total} EUR.</p>
+   <p class="mut">Cancelling: ${esc(r.cancel)}</p>
+   <label for="cd_${r.ref}">Change date</label><select id="cd_${r.ref}" onchange="chg('${r.ref}',this.value)">${dates(m).map(d=>`<option value="${d}" ${d===r.date?"selected":""}>${pretty(d)}</option>`).join("")}</select>
+   <p style="margin-top:12px"><button class="link" type="button" onclick="cancelR('${r.ref}')">Cancel this reservation</button></p></article>`}).join(""):`<p>You have no reservations yet.</p>`)+`<p><button class="primary" type="button" onclick="goHome()">Find a stall</button></p>`;toTop()}
+function chg(ref,d){const l=load(),r=l.find(x=>x.ref===ref),m=MARKETS.find(x=>x.id===r.mid),s=m.stalls.find(x=>x[0]===r.sid);
+  if(l.some(x=>x.ref!==ref&&x.mid===r.mid&&x.date===d&&x.sid===r.sid)){alert("Stall "+r.sid+" is already taken on that date. Cancel and choose another stall.");mineV();return}
+  r.date=d;save(l);mineV()}
+function cancelR(ref){const r=load().find(x=>x.ref===ref);if(confirm("Cancel reservation "+ref+"?\n\nTerms: "+r.cancel)){save(load().filter(x=>x.ref!==ref));mineV()}}
+function openM(id){S.m=MARKETS.find(m=>m.id===id);S.date="";S.stall=null;S.v={};S.err={};market();toTop()}
+function goHome(){S.m=null;home();toTop()}
+document.getElementById("mine").onclick=mineV;home();
+</script></body></html>
