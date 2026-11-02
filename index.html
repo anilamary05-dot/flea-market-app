@@ -29,11 +29,9 @@ button{cursor:pointer;font-size:1rem;color:var(--ink)}.primary{background:var(--
 .stall{text-align:left;background:var(--card);border:1.5px solid #8d8878;border-radius:8px;padding:9px 11px;font-family:"Trebuchet MS",Arial,sans-serif;font-size:.92rem}.stall b{display:block}
 .stall[aria-pressed=true]{border:3px solid var(--acc)}.stall:disabled{background:var(--taken);color:var(--mut);border-style:dashed;cursor:not-allowed}
 .ok{background:var(--okbg);border-radius:8px;padding:16px}.check{display:flex;gap:10px;font-weight:400;align-items:flex-start}.check input{width:18px;height:18px;margin-top:5px}
-dialog{max-width:520px;width:92%;border:2px solid var(--acc);border-radius:10px;background:var(--card);color:var(--ink);padding:18px;font-family:"Trebuchet MS",Arial,sans-serif}dialog::backdrop{background:rgba(0,0,0,.5)}dialog p{margin:0 0 10px}
 </style></head><body>
 <header><h1>Stallfinder</h1><button id="mine" type="button">My reservations</button></header>
 <main id="app" tabindex="-1"></main>
-<dialog id="dlg" aria-label="Date not available"></dialog>
 <script>
 const ITEMS=[["clothes","Clothes"],["books","Books and media"],["household","Household items"],["toys","Toys"],["electronics","Electronics"],["furniture","Furniture"]];
 const DAYS=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -54,7 +52,7 @@ const MARKETS=[
 
 const app=document.getElementById("app");
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let S={items:[],m:null,date:"",pref:"",stall:null,v:{},err:{}};
+let S={items:[],m:null,date:"",stall:null,v:{},err:{}};
 const load=()=>{try{return JSON.parse(localStorage.getItem("res2")||"[]")}catch(e){return[]}};
 const save=l=>{try{localStorage.setItem("res2",JSON.stringify(l))}catch(e){}};
 const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -66,68 +64,38 @@ const blocked=m=>S.items.filter(k=>!m.allow[k]);
 const label=k=>ITEMS.find(i=>i[0]===k)[1];
 const toTop=()=>{app.focus({preventScroll:true});scrollTo(0,0)};
 
-
-const t0=()=>{const t=new Date();t.setHours(12,0,0,0);return t};
-const sh=d=>new Date(d+"T12:00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
-function avail(m,date){
-  const d=new Date(date+"T12:00:00"),n=Math.round((d-t0())/864e5);
-  if(!date||isNaN(n))return{ok:false,reason:"Choose a valid date."};
-  if(n<0)return{ok:false,reason:"This date is in the past."};
-  if(d.getDay()!==m.day)return{ok:false,reason:`${m.name} only takes place on ${DAYS[m.day]}s.`};
-  if(n<m.deadline)return{ok:false,reason:`Registration closes ${m.deadline} day${m.deadline>1?"s":""} before the market, so this date is too late.`};
-  if(m.stalls.every(x=>taken(m,x,date)))return{ok:false,reason:"All stalls are already taken on this date."};
-  return{ok:true};
-}
-function nextAvail(m,n){const o=[],t=t0();for(let i=0;i<180&&o.length<n;i++){const d=new Date(t);d.setDate(t.getDate()+i);const x=iso(d);if(avail(m,x).ok)o.push(x)}return o}
-function showDlg(title,html){const d=document.getElementById("dlg");d.innerHTML=`<h3 style="margin-top:0">${title}</h3>${html}<p style="margin-top:14px"><button class="primary" type="button" onclick="closeDlg()">Close</button></p>`;if(d.showModal)d.showModal();else d.setAttribute("open","")}
-function closeDlg(){const d=document.getElementById("dlg");if(d.close)d.close();else d.removeAttribute("open")}
-function dateDlg(ms,date){showDlg("Not available on "+pretty(date),ms.map(m=>{const nx=nextAvail(m,3);return `<p><b>${esc(m.name)}</b><br>${esc(avail(m,date).reason)}<br>${nx.length?`Next available: ${nx.map(d=>`<button type="button" class="chip" onclick="pickDate('${m.id}','${d}')">${sh(d)}</button>`).join(" ")}`:"No free dates in the next 6 months."}</p>`}).join(""))}
-function pickDate(mid,d){closeDlg();if(S.m){S.date=d;S.stall=null;S.err={};market()}else{S.pref=d;home()}}
 function home(){
-  const im=MARKETS.filter(m=>S.items.every(k=>m.allow[k])),hid=MARKETS.length-im.length;
-  const ok=S.pref?im.filter(m=>avail(m,S.pref).ok):im,off=S.pref?im.filter(m=>!avail(m,S.pref).ok):[];
-  const list=ok.slice().sort((a,b)=>(a.fee+a.dep)-(b.fee+b.dep));
+  const list=MARKETS.slice().sort((a,b)=>(a.fee+a.dep)-(b.fee+b.dep));
   app.innerHTML=`<h2>Find a stall for your old belongings</h2>
-  <p class="mut">Choose what you are selling and, if you like, the date you want. You will only see markets that allow all your items and are open that day.</p>
+  <p class="mut">Choose what you are selling. Each market shows whether it allows your items and what you will pay in total.</p>
   <div class="ui"><b>What are you selling?</b></div>
   <div class="chips" role="group" aria-label="What are you selling">${ITEMS.map(i=>`<button type="button" class="chip" data-k="${i[0]}" aria-pressed="${S.items.includes(i[0])}">${i[1]}</button>`).join("")}</div>
-  <label for="pref">Preferred date (optional)</label><input id="pref" type="date" value="${esc(S.pref)}" min="${iso(t0())}" style="max-width:260px">
-  ${S.pref?`<p style="margin-top:8px"><button class="link" type="button" id="clrd">Clear date</button></p>`:""}
-  ${S.items.length&&hid?`<p class="ui mut" style="margin-top:12px">${hid} market${hid>1?"s are":" is"} hidden because ${hid>1?"they do":"it does"} not allow all your items.</p>`:""}
-  ${S.items.length&&!im.length?`<div class="alert"><b>No market allows all of: ${S.items.map(label).join(", ")}.</b> Remove an item to see more markets. <button class="link" type="button" id="clri">Clear items</button></div>`:""}
-  ${off.length?`<div class="box"><b>Not available on ${pretty(S.pref)}:</b><ul style="margin:6px 0 0;padding-left:20px">${off.map(m=>`<li>${esc(m.name)}: ${esc(avail(m,S.pref).reason)}</li>`).join("")}</ul></div>`:""}
-  ${list.map(m=>`<article class="card"><h3>${esc(m.name)}</h3>
+  ${list.map(m=>{const b=blocked(m);return `<article class="card"><h3>${esc(m.name)}</h3>
    <div class="meta"><span>${DAYS[m.day]}s, ${m.time}</span><span>From <b>${m.fee+m.dep} EUR</b> in total (stall ${m.fee}${m.dep?` + ${m.dep} deposit`:""})</span><span>Register ${m.deadline} day${m.deadline>1?"s":""} ahead</span></div>
-   ${S.items.length?`<span class="tag yes">All your items are allowed</span>`:""}${S.pref?`<span class="tag yes">Open on ${sh(S.pref)}</span>`:""}
+   ${S.items.length?(b.length?`<span class="tag no">Not allowed: ${b.map(label).join(", ")}</span>`:`<span class="tag yes">All your items are allowed</span>`):""}
    <p class="mut" style="margin-bottom:6px">${esc(m.who)}. Cancelling: ${esc(m.cancel)}</p>
-   <button class="primary" type="button" onclick="openM('${m.id}')">View stalls and book</button></article>`).join("")}`;
+   <button class="primary" type="button" onclick="openM('${m.id}')">View stalls and book</button></article>`}).join("")}`;
   app.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{const k=c.dataset.k;S.items=S.items.includes(k)?S.items.filter(x=>x!==k):S.items.concat(k);home()});
-  document.getElementById("pref").onchange=e=>{S.pref=e.target.value;home();if(S.pref){const i2=MARKETS.filter(m=>S.items.every(k=>m.allow[k]));if(i2.length&&!i2.some(m=>avail(m,S.pref).ok))dateDlg(i2,S.pref)}};
-  const cd=document.getElementById("clrd");if(cd)cd.onclick=()=>{S.pref="";home()};
-  const ci=document.getElementById("clri");if(ci)ci.onclick=()=>{S.items=[];home()};
 }
 
 function market(){
-  const m=S.m;if(!S.date||!avail(m,S.date).ok)S.date=nextAvail(m,1)[0]||"";
-  const st=S.stall?m.stalls.find(x=>x[0]===S.stall):null;if(st&&taken(m,st,S.date)){S.stall=null}
-  const chosen=S.stall?m.stalls.find(x=>x[0]===S.stall):null,b=blocked(m),rows=["front","middle","back"],nx=nextAvail(m,4);
+  const m=S.m,ds=dates(m);if(!S.date||!ds.includes(S.date))S.date=ds[0];
+  const st=S.stall?m.stalls.find(s=>s[0]===S.stall):null;if(st&&taken(m,st,S.date)){S.stall=null}
+  const b=blocked(m),rows=["front","middle","back"];
   app.innerHTML=`<button class="link ui" type="button" onclick="goHome()">Back to all markets</button>
   <h2 style="margin-top:10px">${esc(m.name)}</h2><div class="meta"><span>${DAYS[m.day]}s, ${m.time}</span><span>${esc(m.who)}</span><span>Arrive from ${m.arrive}</span></div>
-  ${S.items.length?(b.length?`<div class="alert"><b>Not allowed here:</b> ${b.map(label).join(", ")}. Leave those items at home.</div>`:`<div class="box">All the items you chose are allowed here.</div>`):""}
+  ${S.items.length?(b.length?`<div class="alert"><b>Not allowed here:</b> ${b.map(label).join(", ")}. You can still book, but leave those items at home.</div>`:`<div class="box">All the items you chose are allowed here.</div>`):""}
   <div class="box"><b>Price:</b> stall ${m.fee} EUR${m.dep?`, refundable deposit ${m.dep} EUR`:""}. Larger stalls cost extra.<br><b>Cancelling:</b> ${esc(m.cancel)}</div>
   <div class="box"><b>Getting there and setting up</b><br>${esc(m.trip)}</div>
   <div class="box"><b>Rules</b><ul style="margin:6px 0 0;padding-left:20px">${m.rules.map(r=>`<li>${esc(r)}</li>`).join("")}</ul></div>
-  <h3>1. Date</h3><label for="date" class="ui">Pick any date<span class="hint">If a date is not available, you will see why and the next free dates.</span></label>
-  <input id="date" type="date" value="${esc(S.date)}" min="${iso(t0())}" style="max-width:260px">
-  <div class="chips" style="margin-top:8px"><span class="ui mut" style="align-self:center">Next available:</span>${nx.map(d=>`<button class="chip" type="button" data-d="${d}" aria-pressed="${d===S.date}">${sh(d)}</button>`).join("")}</div>
+  <h3>1. Date</h3><select id="date" aria-label="Market date">${ds.map(d=>`<option value="${d}" ${d===S.date?"selected":""}>${pretty(d)}</option>`).join("")}</select>
   <h3>2. Stall</h3><div class="entrance">ENTRANCE</div>
-  ${rows.map(r=>{const g=m.stalls.filter(x=>x[5]===r);return g.length?`<div class="row"><div class="lbl">${r==="front"?"Near the entrance":r==="middle"?"Middle":"At the back"}</div><div class="stalls">${g.map(x=>{const t=taken(m,x,S.date);return `<button type="button" class="stall" data-id="${x[0]}" aria-pressed="${S.stall===x[0]}" ${t?"disabled":""}><b>${x[0]}: ${esc(x[1])}</b>${esc(x[2])}<br>${t?"Already taken":price(m,x)+" EUR"}</button>`}).join("")}</div></div>`:""}).join("")}
-  ${chosen?form(m,chosen):`<p class="mut" style="margin-top:12px">Choose a free stall to continue.</p>`}`;
-  document.getElementById("date").onchange=e=>{const v=e.target.value;if(!avail(m,v).ok){dateDlg([m],v);market();return}S.date=v;S.stall=null;S.err={};market()};
-  app.querySelectorAll("[data-d]").forEach(x=>x.onclick=()=>{S.date=x.dataset.d;S.stall=null;S.err={};market()});
+  ${rows.map(r=>{const g=m.stalls.filter(s=>s[5]===r);return g.length?`<div class="row"><div class="lbl">${r==="front"?"Near the entrance":r==="middle"?"Middle":"At the back"}</div><div class="stalls">${g.map(s=>{const t=taken(m,s,S.date);return `<button type="button" class="stall" data-id="${s[0]}" aria-pressed="${S.stall===s[0]}" ${t?"disabled":""}><b>${s[0]}: ${esc(s[1])}</b>${esc(s[2])}<br>${t?"Already taken":price(m,s)+" EUR"}</button>`}).join("")}</div></div>`:""}).join("")}
+  ${st?form(m,st):`<p class="mut" style="margin-top:12px">Choose a free stall to continue.</p>`}`;
+  document.getElementById("date").onchange=e=>{S.date=e.target.value;S.err={};market()};
   app.querySelectorAll(".stall").forEach(x=>x.onclick=()=>{S.stall=x.dataset.id;S.err={};market();document.getElementById("details").scrollIntoView({behavior:"smooth"})});
   app.querySelectorAll("[data-k]").forEach(i=>{i.oninput=()=>{S.v[i.dataset.k]=i.type==="checkbox"?i.checked:i.value}});
-  const rb=document.getElementById("reserve");if(rb)rb.onclick=submit;
+  const r=document.getElementById("reserve");if(r)r.onclick=submit;
 }
 function fld(id,l,h,type,ph){const e=S.err[id],v=S.v[id]||"";const inp=type==="area"?`<textarea id="${id}" data-k="${id}" rows="3" class="${e?"bad":""}" ${e?`aria-invalid="true" aria-describedby="e_${id}"`:""}>${esc(v)}</textarea>`:`<input id="${id}" data-k="${id}" type="${type||"text"}" value="${esc(v)}" class="${e?"bad":""}" ${e?`aria-invalid="true" aria-describedby="e_${id}"`:""}>`;
   return `<label for="${id}">${esc(l)}${h?`<span class="hint">${esc(h)}</span>`:""}</label>${inp}${e?`<div class="msg" id="e_${id}">${esc(e)}</div>`:""}`}
@@ -154,7 +122,7 @@ function submit(){
   if(Object.keys(e).length){market();const first=document.querySelector(".bad,#agree");if(first)first.focus();return}
   const ref="SF-"+Math.random().toString(36).slice(2,7).toUpperCase(),l=load();
   const r={ref,mid:m.id,mname:m.name,date:S.date,sid:s[0],sname:s[1],total:price(m,s)+m.dep,name:v.name.trim(),email:em,arrive:m.arrive,trip:m.trip,cancel:m.cancel,bring:m.bring};
-  l.push(r);save(l);S={items:S.items,m:null,date:"",pref:S.pref,stall:null,v:{},err:{}};done(r)}
+  l.push(r);save(l);S={items:S.items,m:null,date:"",stall:null,v:{},err:{}};done(r)}
 
 function done(r){
   app.innerHTML=`<div class="ok"><h2>Stall reserved</h2><p>Reference <b>${esc(r.ref)}</b>. This reservation is saved on this device only, and no email is sent.</p>
@@ -174,7 +142,7 @@ function chg(ref,d){const l=load(),r=l.find(x=>x.ref===ref),m=MARKETS.find(x=>x.
   if(l.some(x=>x.ref!==ref&&x.mid===r.mid&&x.date===d&&x.sid===r.sid)){alert("Stall "+r.sid+" is already taken on that date. Cancel and choose another stall.");mineV();return}
   r.date=d;save(l);mineV()}
 function cancelR(ref){const r=load().find(x=>x.ref===ref);if(confirm("Cancel reservation "+ref+"?\n\nTerms: "+r.cancel)){save(load().filter(x=>x.ref!==ref));mineV()}}
-function openM(id){S.m=MARKETS.find(m=>m.id===id);S.date=(S.pref&&avail(S.m,S.pref).ok)?S.pref:"";S.stall=null;S.v={};S.err={};market();toTop()}
+function openM(id){S.m=MARKETS.find(m=>m.id===id);S.date="";S.stall=null;S.v={};S.err={};market();toTop()}
 function goHome(){S.m=null;home();toTop()}
 document.getElementById("mine").onclick=mineV;home();
 </script></body></html>
